@@ -46,6 +46,17 @@ variable "task_memory" {
   default     = 512
 }
 
+variable "captcha_immunity_time" {
+  description = "CAPTCHA を解いてから再度 CAPTCHA を求めるまでの秒数"
+  type        = number
+  default     = 60
+
+  validation {
+    condition     = var.captcha_immunity_time >= 60 && var.captcha_immunity_time <= 259200
+    error_message = "captcha_immunity_time は 60〜259200 秒の範囲で指定してください。"
+  }
+}
+
 variable "desired_count" {
   description = "起動するタスク数 (セッションがインメモリのため 1 を推奨)"
   type        = number

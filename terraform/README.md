@@ -42,6 +42,21 @@ terraform apply
 - `http://<alb_dns_name>/loggedin` → ログイン画面へリダイレクト
 - ユーザー `user1` / パスワード `password` でログイン
 
+## CAPTCHA (AWS WAF)
+
+ALB に Web ACL を関連付け、URI パスが `/login` のリクエスト (GET / POST) に CAPTCHA アクションを適用している。
+
+- ブラウザで `http://<alb_dns_name>/login` を開くと CAPTCHA パズルが表示され、解くと `aws-waf-token` cookie が発行される
+- トークンを持たない POST は 405 で弾かれる
+
+```sh
+curl -i -X POST "http://$(terraform output -raw alb_dns_name)/login"
+# => HTTP/1.1 405 / x-amzn-waf-action: captcha
+```
+
+パズルを解いてから `captcha_immunity_time` 秒 (デフォルト 60 秒、最小 60 秒) 経過すると再度 CAPTCHA が求められる。
+すぐに再度パズルを表示したい場合はブラウザの `aws-waf-token` cookie を削除する。
+
 ## アプリの更新
 
 `latest` タグで push し直した場合、タスク定義は変わらないため強制的に再デプロイする。
