@@ -15,8 +15,8 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
-                        // 1. 特定のパス (/login/**) は認証済みユーザーのみアクセス許可
-                        .requestMatchers("/loggedin/**").authenticated()
+                        // 1. ルート (welcome page) と /loggedin/** は認証済みユーザーのみアクセス許可
+                        .requestMatchers("/", "/loggedin/**").authenticated()
                         .anyRequest().permitAll()
                 )
                 // ログインフォームを有効化 (デフォルトの画面を使用する場合)
