@@ -24,6 +24,11 @@ public class SecurityConfig {
                         .loginProcessingUrl("/login")
                         .defaultSuccessUrl("/loggedin", false)
                         .permitAll() // ログイン画面自体へのアクセスは許可する
+                )
+                // ログアウト (CSRF 保護のため POST のみ受け付ける)
+                .logout(logout -> logout
+                        .logoutUrl("/logout")
+                        .permitAll()
                 );
 
         return http.build();

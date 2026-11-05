@@ -8,7 +8,10 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.formLogin;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.logout;
+import static org.springframework.security.test.web.servlet.response.SecurityMockMvcResultMatchers.unauthenticated;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -57,5 +60,21 @@ class SecurityConfigTests {
         mockMvc.perform(formLogin("/login").user("user1").password("password"))
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("/loggedin"));
+    }
+
+    @Test
+    @WithMockUser
+    void ログアウトするとログイン画面にリダイレクトされ未認証になる() throws Exception {
+        mockMvc.perform(logout("/logout"))
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("/login?logout"))
+                .andExpect(unauthenticated());
+    }
+
+    @Test
+    @WithMockUser
+    void CSRFトークンなしのログアウトは拒否される() throws Exception {
+        mockMvc.perform(post("/logout"))
+                .andExpect(status().isForbidden());
     }
 }
