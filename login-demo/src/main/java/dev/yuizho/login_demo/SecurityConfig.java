@@ -1,5 +1,6 @@
 package dev.yuizho.login_demo;
 
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -10,13 +11,16 @@ import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 @EnableWebSecurity
+@EnableConfigurationProperties(WebAuthnProperties.class)
 public class SecurityConfig {
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, WebAuthnProperties webAuthnProperties) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
                         // 1. ルート (welcome page) と /loggedin/** は認証済みユーザーのみアクセス許可
                         .requestMatchers("/", "/loggedin/**").authenticated()
+                        // パスキーの登録はログイン済みユーザーのみ
+                        .requestMatchers("/webauthn/register/**").authenticated()
                         .anyRequest().permitAll()
                 )
                 // ログインフォームを有効化 (デフォルトの画面を使用する場合)
@@ -29,6 +33,12 @@ public class SecurityConfig {
                 .logout(logout -> logout
                         .logoutUrl("/logout")
                         .permitAll()
+                )
+                // パスキー (WebAuthn) 認証を有効化 (登録画面は /webauthn/register)
+                .webAuthn(webAuthn -> webAuthn
+                        .rpName(webAuthnProperties.rpName())
+                        .rpId(webAuthnProperties.rpId())
+                        .allowedOrigins(webAuthnProperties.allowedOrigins())
                 );
 
         return http.build();

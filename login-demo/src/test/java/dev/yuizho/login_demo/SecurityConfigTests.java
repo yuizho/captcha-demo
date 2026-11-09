@@ -72,6 +72,20 @@ class SecurityConfigTests {
     }
 
     @Test
+    void 未ログインでパスキー登録画面にアクセスするとログイン画面にリダイレクトされる() throws Exception {
+        mockMvc.perform(get("/webauthn/register"))
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    @WithMockUser
+    void ログイン済みならパスキー登録画面が表示される() throws Exception {
+        mockMvc.perform(get("/webauthn/register"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     @WithMockUser
     void CSRFトークンなしのログアウトは拒否される() throws Exception {
         mockMvc.perform(post("/logout"))
