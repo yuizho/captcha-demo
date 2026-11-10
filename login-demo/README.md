@@ -130,3 +130,34 @@ sequenceDiagram
 ### 注意
 
 - H2 Console はログインなしで開ける実験用の設定 (`SecurityConfig` で `/h2-console/**` の CSRF チェックを無効化し、X-Frame-Options を `SAMEORIGIN` にしている)。ローカル以外では有効にしないこと
+
+## フルスクラッチ版パスキー
+
+Spring Security のパスキー実装 (`/webauthn/**`) とは別に、サーバー側の検証を自前で書いたもの。
+コードは `dev.yuizho.login_demo.scratch.webauthn` パッケージにまとめている。JDK の `java.security` と自前の CBOR デコーダだけで検証し、Spring Security には CSRF チェックと、最後にログイン済みのセッションを作る部分だけを任せている。
+
+| 画面 / API | 内容 |
+|---|---|
+| `GET /scratch/register` | 登録画面 (ログイン必須) |
+| `GET /scratch/login` | ログイン画面 |
+| `POST /scratch/webauthn/register/options`, `POST /scratch/webauthn/register` | 登録 |
+| `POST /scratch/webauthn/authenticate/options`, `POST /scratch/webauthn/authenticate` | ログイン |
+
+データは `scratch_user_handles` / `scratch_credentials` テーブルに保存する (Spring 版とは別のテーブル)。同じ認証器でも、Spring 版とは別のパスキーとして登録される。
+
+### サーバーで検証していること
+
+- 登録 (`ScratchRegistrationService`)
+  1. clientDataJSON: `type` が `webauthn.create`、`challenge` がセッションの値と一致、`origin` が許可したもの
+  2. attestationObject を CBOR でデコード (`fmt` = `none` 前提で、attStmt は検証しない)
+  3. authData: rpIdHash = SHA-256(rpId)、UP / UV / AT フラグ、credentialId = `credential.id`
+  4. 公開鍵 (COSE) が ES256 (alg = -7) であること。COSE のまま保存する
+- ログイン (`ScratchAuthenticationService`)
+  1. credential ID で保存済みの公開鍵を探し、userHandle が一致すること
+  2. clientDataJSON: `type` が `webauthn.get`、`challenge`、`origin`
+  3. authData: rpIdHash、UP / UV フラグ
+  4. 署名: `authData || SHA-256(clientDataJSON)` に対する ECDSA の署名を、COSE から変換した公開鍵で検証
+  5. 署名カウンタが増えていること (保存済みも今回も 0 なら見ない。同期パスキーは常に 0)
+  6. userHandle → ユーザー名 → `UserDetailsService` でアカウントを取得し、`SecurityContext` をセッションに保存
+
+勉強用なので、検証に失敗したら例外を投げて 400 を返し、ログに WARN を出すだけ。各ステップは `[scratch]` で始まる INFO ログに出る。

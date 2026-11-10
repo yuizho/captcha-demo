@@ -21,6 +21,8 @@ public class SecurityConfig {
                         .requestMatchers("/", "/loggedin/**").authenticated()
                         // パスキーの登録はログイン済みユーザーのみ
                         .requestMatchers("/webauthn/register/**").authenticated()
+                        // フルスクラッチ版パスキーの登録もログイン済みユーザーのみ
+                        .requestMatchers("/scratch/register", "/scratch/webauthn/register/**").authenticated()
                         .anyRequest().permitAll()
                 )
                 // ログインフォームを有効化 (画面は LoginController の自前のものを使う)

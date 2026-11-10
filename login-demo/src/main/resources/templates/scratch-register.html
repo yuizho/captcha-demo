@@ -1,0 +1,82 @@
+<!DOCTYPE HTML>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>scratch webauthn register</title>
+    <!-- fetch で POST するときに CSRF トークンをヘッダーに付けるため -->
+    <meta name="csrf-header" th:content="${_csrf.headerName}">
+    <meta name="csrf-token" th:content="${_csrf.token}">
+</head>
+<body>
+<p>フルスクラッチ版 (/scratch/webauthn/**)</p>
+<p th:if="${param.success}">パスキーを登録しました</p>
+<p th:if="${param.error}">パスキーの登録に失敗しました</p>
+
+<h2>パスキーを登録</h2>
+<input id="label" placeholder="ラベル (例: MacBook)">
+<button onclick="registerPasskey()">登録</button>
+
+<h2>登録済みのパスキー</h2>
+<table border="1">
+    <tr>
+        <th>ラベル</th>
+        <th>作成日時</th>
+        <th>最終利用日時</th>
+        <th>署名カウンタ</th>
+    </tr>
+    <tr th:each="c : ${credentials}">
+        <td th:text="${c.label}"></td>
+        <td th:text="${c.created}"></td>
+        <td th:text="${c.lastUsed}"></td>
+        <td th:text="${c.signCount}"></td>
+    </tr>
+</table>
+
+<p><a th:href="@{/loggedin}">戻る</a></p>
+
+<script>
+    async function registerPasskey() {
+        // create() の後で止めると、認証器にだけパスキーが残ってしまうので先にチェックする
+        const label = document.getElementById("label").value;
+        if (!label) {
+            alert("ラベルを入力してください");
+            return;
+        }
+        const headers = {
+            "Content-Type": "application/json",
+            [document.querySelector("meta[name=csrf-header]").content]:
+                document.querySelector("meta[name=csrf-token]").content
+        };
+        try {
+            // 1. 自前のサーバー実装から登録オプションを取得する
+            const optionsResponse = await fetch("/scratch/webauthn/register/options", {method: "POST", headers});
+            const optionsJson = await optionsResponse.json();
+            console.log("[scratch-register] 1. options", optionsJson);
+            const options = PublicKeyCredential.parseCreationOptionsFromJSON(optionsJson);
+
+            // 2. 認証器に鍵ペアを作ってもらう
+            const credential = await navigator.credentials.create({publicKey: options});
+            console.log("[scratch-register] 2. navigator.credentials.create() の結果", credential);
+
+            // 3. ラベルと credential を送って、サーバーで検証・保存してもらう
+            const body = {label, credential: credential.toJSON()};
+            console.log("[scratch-register] 3. POST /scratch/webauthn/register に送る JSON", body);
+            const registerResponse = await fetch("/scratch/webauthn/register", {
+                method: "POST",
+                headers,
+                body: JSON.stringify(body)
+            });
+            const result = await registerResponse.json();
+            console.log("[scratch-register] 3'. レスポンス", registerResponse.status, result);
+            if (!registerResponse.ok) {
+                throw new Error(result.error);
+            }
+            location.href = "/scratch/register?success";
+        } catch (e) {
+            console.error(e);
+            location.href = "/scratch/register?error";
+        }
+    }
+</script>
+</body>
+</html>

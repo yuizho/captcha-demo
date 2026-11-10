@@ -1,0 +1,56 @@
+<!DOCTYPE HTML>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>scratch login</title>
+    <!-- fetch で POST するときに CSRF トークンをヘッダーに付けるため -->
+    <meta name="csrf-header" th:content="${_csrf.headerName}">
+    <meta name="csrf-token" th:content="${_csrf.token}">
+</head>
+<body>
+<p>フルスクラッチ版 (/scratch/webauthn/**)</p>
+<p th:if="${param.error}">ログインに失敗しました</p>
+
+<h2>パスキーでログイン</h2>
+<button onclick="loginWithPasskey()">パスキーでログイン</button>
+
+<script>
+    async function loginWithPasskey() {
+        const headers = {
+            "Content-Type": "application/json",
+            [document.querySelector("meta[name=csrf-header]").content]:
+                document.querySelector("meta[name=csrf-token]").content
+        };
+        try {
+            // 1. 自前のサーバー実装から challenge などの認証オプションを取得する
+            const optionsResponse = await fetch("/scratch/webauthn/authenticate/options", {method: "POST", headers});
+            const optionsJson = await optionsResponse.json();
+            console.log("[scratch-login] 1. options", optionsJson);
+            const options = PublicKeyCredential.parseRequestOptionsFromJSON(optionsJson);
+
+            // 2. 認証器に challenge へ署名してもらう
+            const credential = await navigator.credentials.get({publicKey: options});
+            console.log("[scratch-login] 2. navigator.credentials.get() の結果", credential);
+
+            // 3. 署名をサーバーに送って検証してもらう
+            const body = credential.toJSON();
+            console.log("[scratch-login] 3. POST /scratch/webauthn/authenticate に送る JSON", body);
+            const loginResponse = await fetch("/scratch/webauthn/authenticate", {
+                method: "POST",
+                headers,
+                body: JSON.stringify(body)
+            });
+            const result = await loginResponse.json();
+            console.log("[scratch-login] 3'. レスポンス", loginResponse.status, result);
+            if (!loginResponse.ok) {
+                throw new Error(result.error);
+            }
+            location.href = result.redirectUrl;
+        } catch (e) {
+            console.error(e);
+            location.href = "/scratch/login?error";
+        }
+    }
+</script>
+</body>
+</html>

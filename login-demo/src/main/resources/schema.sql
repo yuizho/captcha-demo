@@ -48,3 +48,25 @@ create table user_credentials
     label                        varchar(1000) not null,
     primary key (credential_id)
 );
+
+-- ここから下はフルスクラッチ版パスキー (dev.yuizho.login_demo.scratch.webauthn) 用
+-- ID はすべて base64url の文字列で持つ
+
+-- ユーザー名 ↔ WebAuthn 用ユーザーID (userHandle)
+create table scratch_user_handles
+(
+    username    varchar_ignorecase(50) not null primary key,
+    user_handle varchar(100)           not null unique
+);
+
+-- パスキー (公開鍵は COSE 形式のまま保存する)
+create table scratch_credentials
+(
+    credential_id varchar(1000) not null primary key,
+    user_handle   varchar(100)  not null,
+    public_cose   blob          not null,
+    sign_count    bigint        not null,
+    label         varchar(1000) not null,
+    created       timestamp     not null,
+    last_used     timestamp     not null
+);
