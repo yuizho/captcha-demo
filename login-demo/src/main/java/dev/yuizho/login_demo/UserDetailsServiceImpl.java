@@ -12,7 +12,8 @@ import java.util.Map;
 @Service
 public class UserDetailsServiceImpl implements UserDetailsService {
     private final Map<String, String> users = Map.of(
-            "user1", "{noop}password"
+            "user1", "{noop}password",
+            "user2", "{noop}password"
     );
 
     @Override
