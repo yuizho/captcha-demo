@@ -6,9 +6,12 @@
     <!-- fetch で POST するときに CSRF トークンをヘッダーに付けるため -->
     <meta name="csrf-header" th:content="${_csrf.headerName}">
     <meta name="csrf-token" th:content="${_csrf.token}">
+    <!-- 自前版と webauthn4j 版でテンプレートを共有するので、URL はサーバーから渡す -->
+    <meta name="api-base" th:content="${apiBase}">
+    <meta name="page-url" th:content="${pageUrl}">
 </head>
 <body>
-<p>フルスクラッチ版 (/scratch/webauthn/**)</p>
+<p th:text="|${implementation} (${apiBase}/**)|"></p>
 <p th:if="${param.success}">パスキーを登録しました</p>
 <p th:if="${param.error}">パスキーの登録に失敗しました</p>
 
@@ -42,14 +45,16 @@
             alert("ラベルを入力してください");
             return;
         }
+        const apiBase = document.querySelector("meta[name=api-base]").content;
+        const pageUrl = document.querySelector("meta[name=page-url]").content;
         const headers = {
             "Content-Type": "application/json",
             [document.querySelector("meta[name=csrf-header]").content]:
                 document.querySelector("meta[name=csrf-token]").content
         };
         try {
-            // 1. 自前のサーバー実装から登録オプションを取得する
-            const optionsResponse = await fetch("/scratch/webauthn/register/options", {method: "POST", headers});
+            // 1. サーバーから登録オプションを取得する
+            const optionsResponse = await fetch(`${apiBase}/register/options`, {method: "POST", headers});
             const optionsJson = await optionsResponse.json();
             console.log("[scratch-register] 1. options", optionsJson);
             const options = PublicKeyCredential.parseCreationOptionsFromJSON(optionsJson);
@@ -60,8 +65,8 @@
 
             // 3. ラベルと credential を送って、サーバーで検証・保存してもらう
             const body = {label, credential: credential.toJSON()};
-            console.log("[scratch-register] 3. POST /scratch/webauthn/register に送る JSON", body);
-            const registerResponse = await fetch("/scratch/webauthn/register", {
+            console.log(`[scratch-register] 3. POST ${apiBase}/register に送る JSON`, body);
+            const registerResponse = await fetch(`${apiBase}/register`, {
                 method: "POST",
                 headers,
                 body: JSON.stringify(body)
@@ -71,10 +76,10 @@
             if (!registerResponse.ok) {
                 throw new Error(result.error);
             }
-            location.href = "/scratch/register?success";
+            location.href = `${pageUrl}?success`;
         } catch (e) {
             console.error(e);
-            location.href = "/scratch/register?error";
+            location.href = `${pageUrl}?error`;
         }
     }
 </script>

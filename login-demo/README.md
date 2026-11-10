@@ -131,28 +131,37 @@ sequenceDiagram
 
 - H2 Console はログインなしで開ける実験用の設定 (`SecurityConfig` で `/h2-console/**` の CSRF チェックを無効化し、X-Frame-Options を `SAMEORIGIN` にしている)。ローカル以外では有効にしないこと
 
-## フルスクラッチ版パスキー
+## 自前のパスキー実装 (フルスクラッチ版 / webauthn4j 版)
 
-Spring Security のパスキー実装 (`/webauthn/**`) とは別に、サーバー側の検証を自前で書いたもの。
-コードは `dev.yuizho.login_demo.scratch.webauthn` パッケージにまとめている。JDK の `java.security` と自前の CBOR デコーダだけで検証し、Spring Security には CSRF チェックと、最後にログイン済みのセッションを作る部分だけを任せている。
+Spring Security のパスキー実装 (`/webauthn/**`) とは別に、サーバー側の処理を自分で書いたもの。Spring Security には CSRF チェックと、最後にログイン済みのセッションを作る部分 (`ScratchLoginSupport`) だけを任せている。
 
-| 画面 / API | 内容 |
-|---|---|
-| `GET /scratch/register` | 登録画面 (ログイン必須) |
-| `GET /scratch/login` | ログイン画面 |
-| `POST /scratch/webauthn/register/options`, `POST /scratch/webauthn/register` | 登録 |
-| `POST /scratch/webauthn/authenticate/options`, `POST /scratch/webauthn/authenticate` | ログイン |
+```
+dev.yuizho.login_demo.scratch
+├── (共通) ScratchCredentialRepository, ScratchOptionsFactory, ScratchLoginSupport, Base64Url
+├── webauthn     … フルスクラッチ版: JDK の java.security と自前の CBOR デコーダだけで検証
+└── webauthn4j   … webauthn4j 版: パースと検証を WebAuthnManager に任せる
+```
 
-データは `scratch_user_handles` / `scratch_credentials` テーブルに保存する (Spring 版とは別のテーブル)。同じ認証器でも、Spring 版とは別のパスキーとして登録される。
+| | フルスクラッチ版 | webauthn4j 版 |
+|---|---|---|
+| 登録画面 (ログイン必須) | `GET /scratch/register` | `GET /scratch/webauthn4j/register` |
+| ログイン画面 | `GET /scratch/login` | `GET /scratch/webauthn4j/login` |
+| 登録 API | `POST /scratch/webauthn/register/options`, `/scratch/webauthn/register` | `POST /scratch/webauthn4j/register/options`, `/scratch/webauthn4j/register` |
+| ログイン API | `POST /scratch/webauthn/authenticate/options`, `/scratch/webauthn/authenticate` | `POST /scratch/webauthn4j/authenticate/options`, `/scratch/webauthn4j/authenticate` |
+| ログの接頭辞 | `[scratch]` | `[webauthn4j]` |
+
+- 画面のテンプレート (`scratch-register.html` / `scratch-login.html`) は共有し、API の URL を model で渡している
+- options の JSON (challenge, rp, user など) はプロトコル上ただの JSON で webauthn4j も作らないので、共通の `ScratchOptionsFactory` で作る
+- データは両方とも `scratch_user_handles` / `scratch_credentials` テーブルに保存する (Spring 版とは別のテーブル)。公開鍵を標準の COSE 形式で保存しているので、片方で登録したパスキーでもう片方からログインできる
 
 ### サーバーで検証していること
 
-- 登録 (`ScratchRegistrationService`)
+- 登録
   1. clientDataJSON: `type` が `webauthn.create`、`challenge` がセッションの値と一致、`origin` が許可したもの
   2. attestationObject を CBOR でデコード (`fmt` = `none` 前提で、attStmt は検証しない)
   3. authData: rpIdHash = SHA-256(rpId)、UP / UV / AT フラグ、credentialId = `credential.id`
   4. 公開鍵 (COSE) が ES256 (alg = -7) であること。COSE のまま保存する
-- ログイン (`ScratchAuthenticationService`)
+- ログイン
   1. credential ID で保存済みの公開鍵を探し、userHandle が一致すること
   2. clientDataJSON: `type` が `webauthn.get`、`challenge`、`origin`
   3. authData: rpIdHash、UP / UV フラグ
@@ -160,4 +169,17 @@ Spring Security のパスキー実装 (`/webauthn/**`) とは別に、サーバ�
   5. 署名カウンタが増えていること (保存済みも今回も 0 なら見ない。同期パスキーは常に 0)
   6. userHandle → ユーザー名 → `UserDetailsService` でアカウントを取得し、`SecurityContext` をセッションに保存
 
-勉強用なので、検証に失敗したら例外を投げて 400 を返し、ログに WARN を出すだけ。各ステップは `[scratch]` で始まる INFO ログに出る。
+### 実装の対応
+
+| 処理 | フルスクラッチ版 (`scratch.webauthn`) | webauthn4j 版 (`scratch.webauthn4j`) |
+|---|---|---|
+| base64url・CBOR のデコード | `Base64Url`, `Cbor`, `AuthenticatorData` | `WebAuthnManager.verifyRegistrationResponseJSON` / `parseAuthenticationResponseJSON` |
+| 登録の検証 (1〜4) | `ScratchVerifier` + `ScratchRegistrationService` | `verifyRegistrationResponseJSON` + `RegistrationParameters` |
+| COSE → 公開鍵 | `CoseConverter` | `COSEKey` (CBOR から `readValue`) |
+| ログインの検証 (2〜5) | `ScratchVerifier` + `Signature` + signCount のチェック | `verify` + `AuthenticationParameters` (DB の値から `CredentialRecordImpl` を組み立てる) |
+| userHandle の一致 (ログイン 1) | 自前 | 自前 (webauthn4j はチェックしない) |
+
+- webauthn4j 版は `createNonStrictWebAuthnManager()` を使っている (attestation の証明書チェーンを検証しない。`attestation: "none"` なら十分)
+- webauthn4j の例外は失敗の理由がクラス名でわかる (例: `BadChallengeException`, `MaliciousCounterValueException`)。レスポンスの `error` にクラス名を入れている
+
+勉強用なので、検証に失敗したら例外を投げて 400 を返し、ログに WARN を出すだけ。

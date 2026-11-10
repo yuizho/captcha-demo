@@ -1,5 +1,6 @@
 package dev.yuizho.login_demo.scratch.webauthn;
 
+import dev.yuizho.login_demo.scratch.ScratchLoginSupport;
 import dev.yuizho.login_demo.scratch.webauthn.ScratchAuthenticationService.AuthenticationRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -21,9 +22,11 @@ class ScratchAuthenticationController {
     private static final Logger log = LoggerFactory.getLogger(ScratchAuthenticationController.class);
 
     private final ScratchAuthenticationService service;
+    private final ScratchLoginSupport loginSupport;
 
-    ScratchAuthenticationController(ScratchAuthenticationService service) {
+    ScratchAuthenticationController(ScratchAuthenticationService service, ScratchLoginSupport loginSupport) {
         this.service = service;
+        this.loginSupport = loginSupport;
     }
 
     @PostMapping("/options")
@@ -35,7 +38,7 @@ class ScratchAuthenticationController {
     Map<String, Object> authenticate(@RequestBody AuthenticationRequest body, HttpSession session,
                                      HttpServletRequest request, HttpServletResponse response) {
         String username = service.authenticate(body, session);
-        service.login(username, request, response);
+        loginSupport.login(username, request, response);
         return Map.of("authenticated", true, "redirectUrl", "/loggedin");
     }
 

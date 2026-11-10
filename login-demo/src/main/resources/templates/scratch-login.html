@@ -6,9 +6,12 @@
     <!-- fetch で POST するときに CSRF トークンをヘッダーに付けるため -->
     <meta name="csrf-header" th:content="${_csrf.headerName}">
     <meta name="csrf-token" th:content="${_csrf.token}">
+    <!-- 自前版と webauthn4j 版でテンプレートを共有するので、URL はサーバーから渡す -->
+    <meta name="api-base" th:content="${apiBase}">
+    <meta name="page-url" th:content="${pageUrl}">
 </head>
 <body>
-<p>フルスクラッチ版 (/scratch/webauthn/**)</p>
+<p th:text="|${implementation} (${apiBase}/**)|"></p>
 <p th:if="${param.error}">ログインに失敗しました</p>
 
 <h2>パスキーでログイン</h2>
@@ -16,14 +19,16 @@
 
 <script>
     async function loginWithPasskey() {
+        const apiBase = document.querySelector("meta[name=api-base]").content;
+        const pageUrl = document.querySelector("meta[name=page-url]").content;
         const headers = {
             "Content-Type": "application/json",
             [document.querySelector("meta[name=csrf-header]").content]:
                 document.querySelector("meta[name=csrf-token]").content
         };
         try {
-            // 1. 自前のサーバー実装から challenge などの認証オプションを取得する
-            const optionsResponse = await fetch("/scratch/webauthn/authenticate/options", {method: "POST", headers});
+            // 1. サーバーから challenge などの認証オプションを取得する
+            const optionsResponse = await fetch(`${apiBase}/authenticate/options`, {method: "POST", headers});
             const optionsJson = await optionsResponse.json();
             console.log("[scratch-login] 1. options", optionsJson);
             const options = PublicKeyCredential.parseRequestOptionsFromJSON(optionsJson);
@@ -34,8 +39,8 @@
 
             // 3. 署名をサーバーに送って検証してもらう
             const body = credential.toJSON();
-            console.log("[scratch-login] 3. POST /scratch/webauthn/authenticate に送る JSON", body);
-            const loginResponse = await fetch("/scratch/webauthn/authenticate", {
+            console.log(`[scratch-login] 3. POST ${apiBase}/authenticate に送る JSON`, body);
+            const loginResponse = await fetch(`${apiBase}/authenticate`, {
                 method: "POST",
                 headers,
                 body: JSON.stringify(body)
@@ -48,7 +53,7 @@
             location.href = result.redirectUrl;
         } catch (e) {
             console.error(e);
-            location.href = "/scratch/login?error";
+            location.href = `${pageUrl}?error`;
         }
     }
 </script>

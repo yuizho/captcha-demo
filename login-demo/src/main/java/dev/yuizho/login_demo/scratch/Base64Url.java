@@ -1,17 +1,17 @@
-package dev.yuizho.login_demo.scratch.webauthn;
+package dev.yuizho.login_demo.scratch;
 
 import java.util.Base64;
 
 /** WebAuthn の JSON ではバイト列をパディングなしの base64url で表す */
-final class Base64Url {
+public final class Base64Url {
     private Base64Url() {
     }
 
-    static String encode(byte[] bytes) {
+    public static String encode(byte[] bytes) {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
-    static byte[] decode(String value) {
+    public static byte[] decode(String value) {
         return Base64.getUrlDecoder().decode(value);
     }
 }

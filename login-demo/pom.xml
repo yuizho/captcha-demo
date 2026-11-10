@@ -46,6 +46,12 @@
 			<groupId>org.springframework.security</groupId>
 			<artifactId>spring-security-webauthn</artifactId>
 		</dependency>
+		<!-- scratch.webauthn4j で直接使う (spring-security-webauthn が使っているのと同じバージョン) -->
+		<dependency>
+			<groupId>com.webauthn4j</groupId>
+			<artifactId>webauthn4j-core</artifactId>
+			<version>0.31.9.RELEASE</version>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-thymeleaf</artifactId>

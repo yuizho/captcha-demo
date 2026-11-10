@@ -1,28 +1,18 @@
 package dev.yuizho.login_demo.scratch.webauthn;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import dev.yuizho.login_demo.WebAuthnProperties;
-import dev.yuizho.login_demo.scratch.webauthn.ScratchCredentialRepository.ScratchCredential;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import dev.yuizho.login_demo.scratch.Base64Url;
+import dev.yuizho.login_demo.scratch.ScratchCredentialRepository;
+import dev.yuizho.login_demo.scratch.ScratchCredentialRepository.ScratchCredential;
+import dev.yuizho.login_demo.scratch.ScratchOptionsFactory;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.context.SecurityContextHolderStrategy;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
-import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.stereotype.Service;
 
 import java.security.GeneralSecurityException;
-import java.security.SecureRandom;
 import java.security.Signature;
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 
 import static dev.yuizho.login_demo.scratch.webauthn.ScratchVerifier.check;
@@ -31,23 +21,16 @@ import static dev.yuizho.login_demo.scratch.webauthn.ScratchVerifier.check;
 @Service
 class ScratchAuthenticationService {
     private static final Logger log = LoggerFactory.getLogger(ScratchAuthenticationService.class);
-    private static final String CHALLENGE_ATTRIBUTE = "scratch.webauthn.authentication.challenge";
 
-    private final SecureRandom random = new SecureRandom();
-    private final SecurityContextHolderStrategy securityContextHolderStrategy =
-            SecurityContextHolder.getContextHolderStrategy();
-    private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
     private final ScratchCredentialRepository repository;
+    private final ScratchOptionsFactory optionsFactory;
     private final ScratchVerifier verifier;
-    private final UserDetailsService userDetailsService;
-    private final WebAuthnProperties properties;
 
-    ScratchAuthenticationService(ScratchCredentialRepository repository, ScratchVerifier verifier,
-                                 UserDetailsService userDetailsService, WebAuthnProperties properties) {
+    ScratchAuthenticationService(ScratchCredentialRepository repository, ScratchOptionsFactory optionsFactory,
+                                 ScratchVerifier verifier) {
         this.repository = repository;
+        this.optionsFactory = optionsFactory;
         this.verifier = verifier;
-        this.userDetailsService = userDetailsService;
-        this.properties = properties;
     }
 
     // credential.toJSON() のうち、使う項目だけ受け取る
@@ -59,27 +42,13 @@ class ScratchAuthenticationService {
     record Response(String clientDataJSON, String authenticatorData, String signature, String userHandle) {
     }
 
-    /** PublicKeyCredential.parseRequestOptionsFromJSON() に渡せる形の options を作る */
     Map<String, Object> options(HttpSession session) {
-        byte[] challengeBytes = new byte[32];
-        random.nextBytes(challengeBytes);
-        String challenge = Base64Url.encode(challengeBytes);
-        session.setAttribute(CHALLENGE_ATTRIBUTE, challenge);
-        log.info("[scratch] ログインの challenge をセッションに保存 challenge={}", challenge);
-
-        // allowCredentials を空にすると、認証器が持っているこのサイト向けのパスキーから選ばせる (ユーザー名の入力不要)
-        return Map.of(
-                "challenge", challenge,
-                "rpId", properties.rpId(),
-                "timeout", 300_000,
-                "userVerification", "required",
-                "allowCredentials", List.of());
+        return optionsFactory.requestOptions(session);
     }
 
     /** get() の結果 (署名) を検証して、ユーザー名を返す */
     String authenticate(AuthenticationRequest request, HttpSession session) {
-        String challenge = (String) session.getAttribute(CHALLENGE_ATTRIBUTE);
-        session.removeAttribute(CHALLENGE_ATTRIBUTE); // challenge は使い捨て
+        String challenge = optionsFactory.consumeAuthenticationChallenge(session);
 
         // 1. credential ID から、登録時に保存した公開鍵を探す
         ScratchCredential credential = repository.findCredential(request.id())
@@ -114,22 +83,6 @@ class ScratchAuthenticationService {
         String username = repository.findUsername(credential.userHandle()).orElseThrow();
         log.info("[scratch] 認証成功 username={}", username);
         return username;
-    }
-
-    /** ここだけ Spring Security に頼る: ログイン済みの SecurityContext を作ってセッションに保存する */
-    void login(String username, HttpServletRequest request, HttpServletResponse response) {
-        UserDetails user = userDetailsService.loadUserByUsername(username);
-        check(user.isEnabled(), "無効なアカウント: " + username);
-
-        // セッション固定攻撃の対策として、ログイン前後でセッションIDを変える
-        request.changeSessionId();
-
-        SecurityContext context = securityContextHolderStrategy.createEmptyContext();
-        context.setAuthentication(
-                UsernamePasswordAuthenticationToken.authenticated(user, null, user.getAuthorities()));
-        securityContextHolderStrategy.setContext(context);
-        securityContextRepository.saveContext(context, request, response);
-        log.info("[scratch] セッションにログイン情報を保存 username={} authorities={}", username, user.getAuthorities());
     }
 
     private static boolean verifySignature(byte[] cose, byte[] authData, byte[] clientDataJSON, byte[] signature) {
