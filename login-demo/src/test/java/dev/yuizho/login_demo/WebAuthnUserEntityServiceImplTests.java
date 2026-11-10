@@ -1,15 +1,22 @@
 package dev.yuizho.login_demo;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.data.jdbc.test.autoconfigure.DataJdbcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.security.web.webauthn.api.Bytes;
 import org.springframework.security.web.webauthn.api.ImmutablePublicKeyCredentialUserEntity;
 import org.springframework.security.web.webauthn.api.PublicKeyCredentialUserEntity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+// H2 (schema.sql 適用済み) を使い、テストごとにロールバックされる
+@DataJdbcTest
+@Import(WebAuthnUserEntityServiceImpl.class)
 class WebAuthnUserEntityServiceImplTests {
 
-    WebAuthnUserEntityServiceImpl service = new WebAuthnUserEntityServiceImpl();
+    @Autowired
+    WebAuthnUserEntityServiceImpl service;
 
     @Test
     void 保存したユーザーをIDで取得できる() {

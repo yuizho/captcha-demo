@@ -41,7 +41,10 @@ public class SecurityConfig {
                         .rpName(webAuthnProperties.rpName())
                         .rpId(webAuthnProperties.rpId())
                         .allowedOrigins(webAuthnProperties.allowedOrigins())
-                );
+                )
+                // 実験用: H2 Console は CSRF トークンを送らず、画面を iframe で組み立てるため
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/h2-console/**"))
+                .headers(headers -> headers.frameOptions(frameOptions -> frameOptions.sameOrigin()));
 
         return http.build();
     }

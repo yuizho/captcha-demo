@@ -68,6 +68,11 @@
             <artifactId>h2</artifactId>
             <version>2.5.252</version>
         </dependency>
+		<!-- ブラウザから H2 の中身を見るための H2 Console (/h2-console) -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-h2console</artifactId>
+		</dependency>
 
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
