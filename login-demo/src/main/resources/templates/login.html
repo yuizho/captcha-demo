@@ -1,0 +1,59 @@
+<!DOCTYPE HTML>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>login</title>
+    <!-- fetch で POST するときに CSRF トークンをヘッダーに付けるため -->
+    <meta name="csrf-header" th:content="${_csrf.headerName}">
+    <meta name="csrf-token" th:content="${_csrf.token}">
+</head>
+<body>
+<p th:if="${param.error}">ログインに失敗しました</p>
+<p th:if="${param.logout}">ログアウトしました</p>
+
+<h2>パスワードでログイン</h2>
+<!-- th:action を使うと CSRF トークンの hidden input が自動で埋め込まれる -->
+<form th:action="@{/login}" method="post">
+    <input name="username" placeholder="username">
+    <input name="password" type="password" placeholder="password">
+    <button type="submit">ログイン</button>
+</form>
+
+<h2>パスキーでログイン</h2>
+<button onclick="loginWithPasskey()">パスキーでログイン</button>
+
+<script>
+    async function loginWithPasskey() {
+        const headers = {
+            "Content-Type": "application/json",
+            [document.querySelector("meta[name=csrf-header]").content]:
+                document.querySelector("meta[name=csrf-token]").content
+        };
+        try {
+            // 1. サーバーから challenge などの認証オプションを取得する
+            const optionsResponse = await fetch("/webauthn/authenticate/options", {method: "POST", headers});
+            const options = PublicKeyCredential.parseRequestOptionsFromJSON(await optionsResponse.json());
+
+            // 2. 認証器 (Touch ID や 1Password など) に challenge へ署名してもらう
+            const credential = await navigator.credentials.get({publicKey: options});
+
+            // 3. 署名をサーバーに送って検証してもらう
+            const loginResponse = await fetch("/login/webauthn", {
+                method: "POST",
+                headers,
+                body: JSON.stringify(credential.toJSON())
+            });
+            if (!loginResponse.ok) {
+                throw new Error(`HTTP ${loginResponse.status}`);
+            }
+            // 成功すると {"authenticated": true, "redirectUrl": "..."} が返る
+            const {redirectUrl} = await loginResponse.json();
+            location.href = redirectUrl;
+        } catch (e) {
+            console.error(e);
+            location.href = "/login?error";
+        }
+    }
+</script>
+</body>
+</html>

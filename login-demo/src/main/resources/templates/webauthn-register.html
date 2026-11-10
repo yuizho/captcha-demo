@@ -1,0 +1,80 @@
+<!DOCTYPE HTML>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>webauthn register</title>
+    <!-- fetch で POST するときに CSRF トークンをヘッダーに付けるため -->
+    <meta name="csrf-header" th:content="${_csrf.headerName}">
+    <meta name="csrf-token" th:content="${_csrf.token}">
+</head>
+<body>
+<p th:if="${param.success}">パスキーを登録しました</p>
+<p th:if="${param.error}">パスキーの登録に失敗しました</p>
+
+<h2>パスキーを登録</h2>
+<input id="label" placeholder="ラベル (例: MacBook)">
+<button onclick="registerPasskey()">登録</button>
+
+<h2>登録済みのパスキー</h2>
+<table border="1">
+    <tr>
+        <th>ラベル</th>
+        <th>作成日時</th>
+        <th>最終利用日時</th>
+        <th>署名カウンタ</th>
+    </tr>
+    <tr th:each="c : ${credentials}">
+        <td th:text="${c.label}"></td>
+        <td th:text="${c.created}"></td>
+        <td th:text="${c.lastUsed}"></td>
+        <td th:text="${c.signatureCount}"></td>
+    </tr>
+</table>
+
+<p><a th:href="@{/loggedin}">戻る</a></p>
+
+<script>
+    async function registerPasskey() {
+        // サーバー側ではラベルの必須チェックをしないので、ここで止める
+        // (create() の後で止めると、認証器にだけパスキーが残ってしまう)
+        const label = document.getElementById("label").value;
+        if (!label) {
+            alert("ラベルを入力してください");
+            return;
+        }
+        const headers = {
+            "Content-Type": "application/json",
+            [document.querySelector("meta[name=csrf-header]").content]:
+                document.querySelector("meta[name=csrf-token]").content
+        };
+        try {
+            // 1. サーバーから challenge やユーザーIDなどの登録オプションを取得する
+            const optionsResponse = await fetch("/webauthn/register/options", {method: "POST", headers});
+            const options = PublicKeyCredential.parseCreationOptionsFromJSON(await optionsResponse.json());
+
+            // 2. 認証器に新しい鍵ペアを作ってもらう (秘密鍵は認証器の中に残り、公開鍵だけが返ってくる)
+            const credential = await navigator.credentials.create({publicKey: options});
+
+            // 3. 公開鍵とラベルをサーバーに送って保存してもらう
+            const registerResponse = await fetch("/webauthn/register", {
+                method: "POST",
+                headers,
+                body: JSON.stringify({
+                    publicKey: {
+                        credential: credential.toJSON(),
+                        label
+                    }
+                })
+            });
+            if (!registerResponse.ok) {
+                throw new Error(`HTTP ${registerResponse.status}`);
+            }
+            location.href = "/webauthn/register?success";
+        } catch (e) {
+            console.error(e);
+            location.href = "/webauthn/register?error";
+        }
+    }
+</script>
+</body>
+</html>

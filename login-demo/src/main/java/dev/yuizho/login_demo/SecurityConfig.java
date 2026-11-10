@@ -23,8 +23,9 @@ public class SecurityConfig {
                         .requestMatchers("/webauthn/register/**").authenticated()
                         .anyRequest().permitAll()
                 )
-                // ログインフォームを有効化 (デフォルトの画面を使用する場合)
+                // ログインフォームを有効化 (画面は LoginController の自前のものを使う)
                 .formLogin(login -> login
+                        .loginPage("/login")
                         .loginProcessingUrl("/login")
                         .defaultSuccessUrl("/loggedin", false)
                         .permitAll() // ログイン画面自体へのアクセスは許可する
@@ -34,8 +35,9 @@ public class SecurityConfig {
                         .logoutUrl("/logout")
                         .permitAll()
                 )
-                // パスキー (WebAuthn) 認証を有効化 (登録画面は /webauthn/register)
+                // パスキー (WebAuthn) 認証を有効化 (登録画面は WebAuthnRegisterController の自前のものを使う)
                 .webAuthn(webAuthn -> webAuthn
+                        .disableDefaultRegistrationPage(true)
                         .rpName(webAuthnProperties.rpName())
                         .rpId(webAuthnProperties.rpId())
                         .allowedOrigins(webAuthnProperties.allowedOrigins())

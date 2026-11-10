@@ -7,11 +7,13 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.formLogin;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.logout;
 import static org.springframework.security.test.web.servlet.response.SecurityMockMvcResultMatchers.unauthenticated;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -47,6 +49,20 @@ class SecurityConfigTests {
     void ログイン画面は未ログインでも表示される() throws Exception {
         mockMvc.perform(get("/login"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void ログイン失敗時はログイン画面にエラーメッセージが表示される() throws Exception {
+        mockMvc.perform(get("/login").param("error", ""))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("ログインに失敗しました")));
+    }
+
+    @Test
+    void ログアウト後はログイン画面にログアウトメッセージが表示される() throws Exception {
+        mockMvc.perform(get("/login").param("logout", ""))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("ログアウトしました")));
     }
 
     @Test
