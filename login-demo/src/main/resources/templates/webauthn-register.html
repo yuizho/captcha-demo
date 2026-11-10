@@ -33,6 +33,12 @@
 
 <p><a th:href="@{/loggedin}">戻る</a></p>
 
+<!-- 実験用: attestationObject のデコード (integrity で CDN のファイルが改ざんされていないことを確認する) -->
+<script src="https://cdn.jsdelivr.net/npm/cbor-x@1.6.8/dist/index-no-eval.min.js"
+        integrity="sha384-wWTKDyE8atq0SuU23C6PAlPJvYCAuzIHZC47AWyCBXq07dIgtrIOKPxf3qj8KgJF"
+        crossorigin="anonymous"></script>
+<script th:src="@{/webauthn-debug.js}"></script>
+
 <script>
     async function registerPasskey() {
         // サーバー側ではラベルの必須チェックをしないので、ここで止める
@@ -50,25 +56,36 @@
         try {
             // 1. サーバーから challenge やユーザーIDなどの登録オプションを取得する
             const optionsResponse = await fetch("/webauthn/register/options", {method: "POST", headers});
-            const options = PublicKeyCredential.parseCreationOptionsFromJSON(await optionsResponse.json());
+            const optionsJson = await optionsResponse.json();
+            console.log("[passkey-register] 1. options (サーバーから受け取った JSON)", optionsJson);
+            const options = PublicKeyCredential.parseCreationOptionsFromJSON(optionsJson);
+            console.log("[passkey-register] 1'. options (ArrayBuffer に変換後)", options);
 
             // 2. 認証器に新しい鍵ペアを作ってもらう (秘密鍵は認証器の中に残り、公開鍵だけが返ってくる)
             const credential = await navigator.credentials.create({publicKey: options});
+            console.log("[passkey-register] 2. navigator.credentials.create() の結果", credential);
+            // デバッグ用のデコードで失敗しても登録は続ける
+            await logAttestationObject(credential).catch(e => console.warn("[attestation] デコード失敗", e));
 
             // 3. 公開鍵とラベルをサーバーに送って保存してもらう
+            const body = {
+                publicKey: {
+                    credential: credential.toJSON(),
+                    label
+                }
+            };
+            console.log("[passkey-register] 3. POST /webauthn/register に送る JSON", body);
             const registerResponse = await fetch("/webauthn/register", {
                 method: "POST",
                 headers,
-                body: JSON.stringify({
-                    publicKey: {
-                        credential: credential.toJSON(),
-                        label
-                    }
-                })
+                body: JSON.stringify(body)
             });
+            console.log("[passkey-register] 3'. レスポンスのステータス", registerResponse.status);
             if (!registerResponse.ok) {
                 throw new Error(`HTTP ${registerResponse.status}`);
             }
+            // 成功すると {"success": true} が返る
+            console.log("[passkey-register] 3'. レスポンスの JSON", await registerResponse.json());
             location.href = "/webauthn/register?success";
         } catch (e) {
             console.error(e);

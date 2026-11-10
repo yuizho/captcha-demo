@@ -32,23 +32,31 @@
         try {
             // 1. サーバーから challenge などの認証オプションを取得する
             const optionsResponse = await fetch("/webauthn/authenticate/options", {method: "POST", headers});
-            const options = PublicKeyCredential.parseRequestOptionsFromJSON(await optionsResponse.json());
+            const optionsJson = await optionsResponse.json();
+            console.log("[passkey-login] 1. options (サーバーから受け取った JSON)", optionsJson);
+            const options = PublicKeyCredential.parseRequestOptionsFromJSON(optionsJson);
+            console.log("[passkey-login] 1'. options (ArrayBuffer に変換後)", options);
 
             // 2. 認証器 (Touch ID や 1Password など) に challenge へ署名してもらう
             const credential = await navigator.credentials.get({publicKey: options});
+            console.log("[passkey-login] 2. navigator.credentials.get() の結果", credential);
 
             // 3. 署名をサーバーに送って検証してもらう
+            const body = credential.toJSON();
+            console.log("[passkey-login] 3. POST /login/webauthn に送る JSON", body);
             const loginResponse = await fetch("/login/webauthn", {
                 method: "POST",
                 headers,
-                body: JSON.stringify(credential.toJSON())
+                body: JSON.stringify(body)
             });
+            console.log("[passkey-login] 3'. レスポンスのステータス", loginResponse.status);
             if (!loginResponse.ok) {
                 throw new Error(`HTTP ${loginResponse.status}`);
             }
             // 成功すると {"authenticated": true, "redirectUrl": "..."} が返る
-            const {redirectUrl} = await loginResponse.json();
-            location.href = redirectUrl;
+            const result = await loginResponse.json();
+            console.log("[passkey-login] 3'. レスポンスの JSON", result);
+            location.href = result.redirectUrl;
         } catch (e) {
             console.error(e);
             location.href = "/login?error";
