@@ -131,7 +131,7 @@ sequenceDiagram
 
 - H2 Console はログインなしで開ける実験用の設定 (`SecurityConfig` で `/h2-console/**` の CSRF チェックを無効化し、X-Frame-Options を `SAMEORIGIN` にしている)。ローカル以外では有効にしないこと
 
-## 自前のパスキー実装 (フルスクラッチ版 / webauthn4j 版)
+## 自前のパスキー実装 (フルスクラッチ版 / webauthn4j 版 / Yubico 版)
 
 Spring Security のパスキー実装 (`/webauthn/**`) とは別に、サーバー側の処理を自分で書いたもの。Spring Security には CSRF チェックと、最後にログイン済みのセッションを作る部分 (`ScratchLoginSupport`) だけを任せている。
 
@@ -139,20 +139,21 @@ Spring Security のパスキー実装 (`/webauthn/**`) とは別に、サーバ�
 dev.yuizho.login_demo.scratch
 ├── (共通) ScratchCredentialRepository, ScratchOptionsFactory, ScratchLoginSupport, Base64Url
 ├── webauthn     … フルスクラッチ版: JDK の java.security と自前の CBOR デコーダだけで検証
-└── webauthn4j   … webauthn4j 版: パースと検証を WebAuthnManager に任せる
+├── webauthn4j   … webauthn4j 版: パースと検証を WebAuthnManager に任せる
+└── yubico       … Yubico 版: options の生成・パース・検証を Yubico/java-webauthn-server の RelyingParty に任せる
 ```
 
-| | フルスクラッチ版 | webauthn4j 版 |
-|---|---|---|
-| 登録画面 (ログイン必須) | `GET /scratch/register` | `GET /scratch/webauthn4j/register` |
-| ログイン画面 | `GET /scratch/login` | `GET /scratch/webauthn4j/login` |
-| 登録 API | `POST /scratch/webauthn/register/options`, `/scratch/webauthn/register` | `POST /scratch/webauthn4j/register/options`, `/scratch/webauthn4j/register` |
-| ログイン API | `POST /scratch/webauthn/authenticate/options`, `/scratch/webauthn/authenticate` | `POST /scratch/webauthn4j/authenticate/options`, `/scratch/webauthn4j/authenticate` |
-| ログの接頭辞 | `[scratch]` | `[webauthn4j]` |
+| | フルスクラッチ版 | webauthn4j 版 | Yubico 版 |
+|---|---|---|---|
+| 登録画面 (ログイン必須) | `GET /scratch/register` | `GET /scratch/webauthn4j/register` | `GET /scratch/yubico/register` |
+| ログイン画面 | `GET /scratch/login` | `GET /scratch/webauthn4j/login` | `GET /scratch/yubico/login` |
+| 登録 API | `POST /scratch/webauthn/register/options`, `/scratch/webauthn/register` | `POST /scratch/webauthn4j/register/options`, `/scratch/webauthn4j/register` | `POST /scratch/yubico/register/options`, `/scratch/yubico/register` |
+| ログイン API | `POST /scratch/webauthn/authenticate/options`, `/scratch/webauthn/authenticate` | `POST /scratch/webauthn4j/authenticate/options`, `/scratch/webauthn4j/authenticate` | `POST /scratch/yubico/authenticate/options`, `/scratch/yubico/authenticate` |
+| ログの接頭辞 | `[scratch]` | `[webauthn4j]` | `[yubico]` |
 
 - 画面のテンプレート (`scratch-register.html` / `scratch-login.html`) は共有し、API の URL を model で渡している
-- options の JSON (challenge, rp, user など) はプロトコル上ただの JSON で webauthn4j も作らないので、共通の `ScratchOptionsFactory` で作る
-- データは両方とも `scratch_user_handles` / `scratch_credentials` テーブルに保存する (Spring 版とは別のテーブル)。公開鍵を標準の COSE 形式で保存しているので、片方で登録したパスキーでもう片方からログインできる
+- options の JSON (challenge, rp, user など) はプロトコル上ただの JSON で webauthn4j も作らないので、共通の `ScratchOptionsFactory` で作る (Yubico 版は `RelyingParty` が作るので使わない)
+- データはすべて `scratch_user_handles` / `scratch_credentials` テーブルに保存する (Spring 版とは別のテーブル)。公開鍵を標準の COSE 形式で保存しているので、どれかで登録したパスキーで別の版からログインできる
 
 ### サーバーで検証していること
 
@@ -181,5 +182,23 @@ dev.yuizho.login_demo.scratch
 
 - webauthn4j 版は `createNonStrictWebAuthnManager()` を使っている (attestation の証明書チェーンを検証しない。`attestation: "none"` なら十分)
 - webauthn4j の例外は失敗の理由がクラス名でわかる (例: `BadChallengeException`, `MaliciousCounterValueException`)。レスポンスの `error` にクラス名を入れている
+
+### Yubico 版 (`scratch.yubico`)
+
+webauthn4j 版との一番の違いは、options の生成までライブラリがやり、DB はライブラリが `CredentialRepository` 経由で引きにくること。
+
+| 処理 | webauthn4j 版 | Yubico 版 |
+|---|---|---|
+| options の生成 | `ScratchOptionsFactory` (自前) | `RelyingParty.startRegistration` / `startAssertion` |
+| セッションに保存するもの | challenge の文字列 | options 全体 (`PublicKeyCredentialCreationOptions` / `AssertionRequest` の `toJson()`) |
+| rpId・origin・アルゴリズムの設定 | 検証のたびに `ServerProperty` + `*Parameters` を渡す | `RelyingParty` に一度だけ設定 (`YubicoRelyingPartyConfig`) |
+| 登録の検証 | `verifyRegistrationResponseJSON` | `parseRegistrationResponseJson` + `finishRegistration` |
+| ログインの検証 | パース → credentialId で DB を引く → `CredentialRecordImpl` を組み立てて `verify` | `parseAssertionResponseJson` + `finishAssertion` (公開鍵は `YubicoCredentialRepository.lookup` で Yubico が取りにいく) |
+| userHandle の一致 | 自前 | Yubico (`lookup(credentialId, userHandle)` で一致しなければ見つからない扱い) |
+| 署名カウンタ | 検証は webauthn4j、保存は自前 | 検証は Yubico、保存は自前 (`AssertionResult.getSignatureCount()`) |
+
+- userHandle (WebAuthn 用ユーザーID) は Yubico も作らないので、`ScratchOptionsFactory` と同じルール (初回だけ `SecureRandom` の32バイト) で `YubicoRegistrationService` が作る
+- 画面には options の中身だけを返す。`toCredentialsCreateJson()` / `toCredentialsGetJson()` は `{"publicKey": ...}` で包まれていて、`parseCreationOptionsFromJSON()` / `parseRequestOptionsFromJSON()` にはそのまま渡せない
+- Yubico は内部で Jackson 2 (`com.fasterxml.jackson`) を使う (このアプリと webauthn4j は Jackson 3)。API が `JsonProcessingException` を throws しているので、`pom.xml` で `jackson-core` (2.x) を compile スコープに入れている
 
 勉強用なので、検証に失敗したら例外を投げて 400 を返し、ログに WARN を出すだけ。

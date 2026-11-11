@@ -52,6 +52,17 @@
 			<artifactId>webauthn4j-core</artifactId>
 			<version>0.31.9.RELEASE</version>
 		</dependency>
+		<!-- scratch.yubico で使う -->
+		<dependency>
+			<groupId>com.yubico</groupId>
+			<artifactId>webauthn-server-core</artifactId>
+			<version>2.10.1</version>
+		</dependency>
+		<!-- Yubico の API が throws している JsonProcessingException (Jackson 2) をコンパイル時に見えるようにする -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-core</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-thymeleaf</artifactId>
